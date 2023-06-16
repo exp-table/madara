@@ -165,11 +165,11 @@ fn test_data() -> Vec<u8> {
 struct TestHasher;
 
 impl HasherT for TestHasher {
-    fn hash_bytes(&self, data: &[u8]) -> Felt252Wrapper {
+    fn hash_bytes(&self, _data: &[u8]) -> Felt252Wrapper {
         unimplemented!()
     }
 
-    fn compute_hash_on_wrappers(&self, data: &[Felt252Wrapper]) -> Felt252Wrapper {
+    fn compute_hash_on_wrappers(&self, _data: &[Felt252Wrapper]) -> Felt252Wrapper {
         unimplemented!()
     }
 
