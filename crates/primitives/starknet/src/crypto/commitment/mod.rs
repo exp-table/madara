@@ -8,7 +8,7 @@ use starknet_crypto::FieldElement;
 use super::hash::pedersen::PedersenHasher;
 use super::merkle_patricia_tree::merkle_tree::MerkleTree;
 use crate::execution::types::Felt252Wrapper;
-use crate::traits::hash::CryptoHasherT;
+use crate::traits::hash::HasherT;
 use crate::transaction::types::{
     DeclareTransaction, DeployAccountTransaction, EventWrapper, InvokeTransaction, Transaction,
 };
@@ -20,17 +20,17 @@ use crate::transaction::types::{
 /// of the index of the transaction / event within the block.
 ///
 /// The tree height is 64 in our case since our set operation takes u64 index values.
-struct CommitmentTree<T: CryptoHasherT> {
+struct CommitmentTree<T: HasherT> {
     tree: MerkleTree<T>,
 }
 
-impl<T: CryptoHasherT> Default for CommitmentTree<T> {
+impl<T: HasherT> Default for CommitmentTree<T> {
     fn default() -> Self {
         Self { tree: MerkleTree::empty() }
     }
 }
 
-impl<T: CryptoHasherT> CommitmentTree<T> {
+impl<T: HasherT> CommitmentTree<T> {
     /// Sets the value of a key in the merkle tree.
     ///
     /// # Arguments
@@ -57,7 +57,7 @@ impl<T: CryptoHasherT> CommitmentTree<T> {
 /// # Returns
 ///
 /// The transaction commitment, the event commitment and the event count.
-pub fn calculate_commitments<T: CryptoHasherT>(transactions: &[Transaction], events: &[EventWrapper]) -> (H256, H256) {
+pub fn calculate_commitments<T: HasherT>(transactions: &[Transaction], events: &[EventWrapper]) -> (H256, H256) {
     (calculate_transaction_commitment::<T>(transactions), calculate_event_commitment::<T>(events))
 }
 
@@ -74,7 +74,7 @@ pub fn calculate_commitments<T: CryptoHasherT>(transactions: &[Transaction], eve
 /// # Returns
 ///
 /// The merkle root of the merkle tree built from the transactions.
-pub fn calculate_transaction_commitment<T: CryptoHasherT>(transactions: &[Transaction]) -> H256 {
+pub fn calculate_transaction_commitment<T: HasherT>(transactions: &[Transaction]) -> H256 {
     let mut tree = CommitmentTree::<T>::default();
 
     transactions.iter().enumerate().for_each(|(idx, tx)| {
@@ -99,7 +99,7 @@ pub fn calculate_transaction_commitment<T: CryptoHasherT>(transactions: &[Transa
 /// # Returns
 ///
 /// The merkle root of the merkle tree built from the transactions and the number of events.
-pub fn calculate_event_commitment<T: CryptoHasherT>(events: &[EventWrapper]) -> H256 {
+pub fn calculate_event_commitment<T: HasherT>(events: &[EventWrapper]) -> H256 {
     let mut tree = CommitmentTree::<T>::default();
     events.iter().enumerate().for_each(|(id, event)| {
         let final_hash = calculate_event_hash::<T>(event);
@@ -123,12 +123,12 @@ pub fn calculate_event_commitment<T: CryptoHasherT>(events: &[EventWrapper]) -> 
 /// The transaction hash with signature.
 fn calculate_transaction_hash_with_signature<T>(tx: &Transaction) -> FieldElement
 where
-    T: CryptoHasherT,
+    T: HasherT,
 {
-    let signature_hash = <T as CryptoHasherT>::compute_hash_on_elements(
+    let signature_hash = <T as HasherT>::compute_hash_on_elements(
         &tx.signature.iter().map(|elt| FieldElement::from(*elt)).collect::<Vec<FieldElement>>(),
     );
-    <T as CryptoHasherT>::hash(FieldElement::from(tx.hash), signature_hash)
+    <T as HasherT>::hash_elements(FieldElement::from(tx.hash), signature_hash)
 }
 /// Computes the transaction hash of an invoke transaction.
 ///
@@ -196,11 +196,11 @@ pub fn calculate_transaction_hash_common<T>(
     chain_id: Felt252Wrapper,
 ) -> Felt252Wrapper
 where
-    T: CryptoHasherT,
+    T: HasherT,
 {
     // All the values are validated before going through this function so it's safe to unwrap.
     let sender_address = FieldElement::from_bytes_be(&sender_address.into()).unwrap();
-    let calldata_hash = <T as CryptoHasherT>::compute_hash_on_elements(
+    let calldata_hash = <T as HasherT>::compute_hash_on_elements(
         &calldata.iter().map(|&val| FieldElement::from(val)).collect::<Vec<FieldElement>>(),
     );
     let max_fee = FieldElement::from_bytes_be(&max_fee.into()).unwrap();
@@ -208,7 +208,7 @@ where
     let version = FieldElement::from_byte_slice_be(&version.to_be_bytes()).unwrap();
     let tx_prefix = FieldElement::from_byte_slice_be(tx_prefix).unwrap();
 
-    let tx_hash = <T as CryptoHasherT>::compute_hash_on_elements(&vec![
+    let tx_hash = <T as HasherT>::compute_hash_on_elements(&vec![
         tx_prefix,
         version,
         sender_address,
@@ -226,7 +226,7 @@ where
 ///
 /// See the [documentation](https://docs.starknet.io/docs/Events/starknet-events#event-hash)
 /// for details.
-pub fn calculate_event_hash<T: CryptoHasherT>(event: &EventWrapper) -> FieldElement {
+pub fn calculate_event_hash<T: HasherT>(event: &EventWrapper) -> FieldElement {
     let keys_hash = T::compute_hash_on_elements(
         &event.keys.iter().map(|key| FieldElement::from(*key)).collect::<Vec<FieldElement>>(),
     );

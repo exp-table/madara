@@ -12,7 +12,7 @@ use bitvec::prelude::BitVec;
 use bitvec::slice::BitSlice;
 use starknet_crypto::FieldElement;
 
-use crate::traits::hash::CryptoHasherT;
+use crate::traits::hash::HasherT;
 
 /// A node in a Binary Merkle-Patricia Tree graph.
 #[derive(Clone, Debug, PartialEq)]
@@ -144,7 +144,7 @@ impl BinaryNode {
     ///
     /// If either child's hash is [None], then the hash cannot
     /// be calculated and it will remain [None].
-    pub(crate) fn calculate_hash<H: CryptoHasherT>(&mut self) {
+    pub(crate) fn calculate_hash<H: HasherT>(&mut self) {
         if self.hash.is_some() {
             return;
         }
@@ -159,7 +159,7 @@ impl BinaryNode {
             None => unreachable!("subtrees have to be committed first"),
         };
 
-        self.hash = Some(H::hash(left, right));
+        self.hash = Some(H::hash_elements(left, right));
     }
 }
 
@@ -249,7 +249,7 @@ impl EdgeNode {
     ///
     /// If the child's hash is [None], then the hash cannot
     /// be calculated and it will remain [None].
-    pub(crate) fn calculate_hash<H: CryptoHasherT>(&mut self) {
+    pub(crate) fn calculate_hash<H: HasherT>(&mut self) {
         if self.hash.is_some() {
             return;
         }
@@ -267,7 +267,7 @@ impl EdgeNode {
         length[31] = self.path.len() as u8;
 
         let length = FieldElement::from_byte_slice_be(&length).unwrap();
-        let hash = H::hash(child, path) + length;
+        let hash = H::hash_elements(child, path) + length;
         self.hash = Some(hash);
     }
 }

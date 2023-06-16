@@ -81,7 +81,7 @@ use mp_starknet::execution::types::{
     Felt252Wrapper,
 };
 use mp_starknet::storage::{StarknetStorageSchemaVersion, PALLET_STARKNET_SCHEMA};
-use mp_starknet::traits::hash::{CryptoHasherT, DefaultHasher, HasherT};
+use mp_starknet::traits::hash::{DefaultHasher, HasherT};
 use mp_starknet::transaction::types::{
     DeclareTransaction, DeployAccountTransaction, EventError, EventWrapper as StarknetEventType, InvokeTransaction,
     Transaction, TransactionExecutionInfoWrapper, TransactionReceiptWrapper, TxType,
@@ -138,7 +138,7 @@ pub mod pallet {
         /// How Starknet state root is calculated.
         type StateRoot: Get<Felt252Wrapper>;
         /// The hashing function to use.
-        type SystemHash: HasherT + DefaultHasher + CryptoHasherT;
+        type SystemHash: HasherT + DefaultHasher;
         /// The time idk what.
         type TimestampProvider: Time;
         /// A configuration for base priority of unsigned transactions.

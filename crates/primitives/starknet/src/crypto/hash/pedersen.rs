@@ -2,7 +2,7 @@
 use starknet_crypto::{pedersen_hash, FieldElement};
 
 use crate::execution::felt252_wrapper::Felt252Wrapper;
-use crate::traits::hash::{CryptoHasherT, DefaultHasher, HasherT};
+use crate::traits::hash::{DefaultHasher, HasherT};
 
 /// The Pedersen hasher.
 #[derive(Clone, Copy, Default, scale_codec::Encode, scale_codec::Decode, scale_info::TypeInfo)]
@@ -16,7 +16,7 @@ impl HasherT for PedersenHasher {
     /// * `data` - The data to hash.
     /// # Returns
     /// The hash of the data.
-    fn hash(&self, data: &[u8]) -> Felt252Wrapper {
+    fn hash_bytes(&self, data: &[u8]) -> Felt252Wrapper {
         // For now we use the first 31 bytes of the data as the field element, to avoid any panics.
         // TODO: have proper error handling and think about how to hash efficiently big chunks of data.
         let field_element = FieldElement::from_byte_slice_be(&data[..31]).unwrap();
@@ -32,7 +32,7 @@ impl HasherT for PedersenHasher {
     /// # Returns
     ///
     /// The hash of the data.
-    fn hash_elements(&self, data: &[Felt252Wrapper]) -> Felt252Wrapper {
+    fn compute_hash_on_wrappers(&self, data: &[Felt252Wrapper]) -> Felt252Wrapper {
         let mut hash = FieldElement::ZERO;
         for element in data {
             hash = pedersen_hash(&hash, &element.0);
@@ -43,18 +43,9 @@ impl HasherT for PedersenHasher {
 
         Felt252Wrapper(hash)
     }
-}
 
-impl DefaultHasher for PedersenHasher {
-    fn hasher() -> Self {
-        Self::default()
-    }
-}
-
-/// The pedersen CryptoHasher implementation.
-impl CryptoHasherT for PedersenHasher {
     #[inline(always)]
-    fn hash(a: FieldElement, b: FieldElement) -> FieldElement {
+    fn hash_elements(a: FieldElement, b: FieldElement) -> FieldElement {
         pedersen_hash(&a, &b)
     }
 
@@ -70,13 +61,20 @@ impl CryptoHasherT for PedersenHasher {
     #[inline]
     fn compute_hash_on_elements(elements: &[FieldElement]) -> FieldElement {
         if elements.is_empty() {
-            <PedersenHasher as CryptoHasherT>::hash(FieldElement::ZERO, FieldElement::ZERO)
+            <PedersenHasher as HasherT>::hash_elements(FieldElement::ZERO, FieldElement::ZERO)
         } else {
-            let hash = elements.iter().fold(FieldElement::ZERO, |a, b| <PedersenHasher as CryptoHasherT>::hash(a, *b));
-            <PedersenHasher as CryptoHasherT>::hash(
+            let hash =
+                elements.iter().fold(FieldElement::ZERO, |a, b| <PedersenHasher as HasherT>::hash_elements(a, *b));
+            <PedersenHasher as HasherT>::hash_elements(
                 hash,
                 FieldElement::from_byte_slice_be(&elements.len().to_be_bytes()).unwrap(),
             )
         }
+    }
+}
+
+impl DefaultHasher for PedersenHasher {
+    fn hasher() -> Self {
+        Self::default()
     }
 }
