@@ -1,4 +1,6 @@
 //! Pedersen hash module.
+use alloc::vec::Vec;
+
 use starknet_crypto::{pedersen_hash, FieldElement};
 
 use crate::execution::felt252_wrapper::Felt252Wrapper;
@@ -33,14 +35,7 @@ impl HasherT for PedersenHasher {
     ///
     /// The hash of the data.
     fn compute_hash_on_wrappers(&self, data: &[Felt252Wrapper]) -> Felt252Wrapper {
-        let mut hash = FieldElement::ZERO;
-        for element in data {
-            hash = pedersen_hash(&hash, &element.0);
-        }
-
-        let data_len = Felt252Wrapper::from(data.len() as u64);
-        hash = pedersen_hash(&hash, &data_len.0);
-
+        let hash = Self::compute_hash_on_elements(&data.iter().map(|x| x.0).collect::<Vec<FieldElement>>());
         Felt252Wrapper(hash)
     }
 
@@ -49,7 +44,7 @@ impl HasherT for PedersenHasher {
         pedersen_hash(&a, &b)
     }
 
-    /// Compute hash on elements, base on the [python implementation](https://github.com/starkware-libs/cairo-lang/blob/12ca9e91bbdc8a423c63280949c7e34382792067/src/starkware/cairo/common/hash_state.py#L6-L15).
+    /// Compute hash on elements, taken from [starknet-rs](https://github.com/xJonathanLEI/starknet-rs/blob/master/starknet-core/src/crypto.rs#L25) pending a no_std support.
     ///
     /// # Arguments
     ///
@@ -60,16 +55,14 @@ impl HasherT for PedersenHasher {
     /// h(h(h(h(0, data\[0\]), data\[1\]), ...), data\[n-1\]), n).
     #[inline]
     fn compute_hash_on_elements(elements: &[FieldElement]) -> FieldElement {
-        if elements.is_empty() {
-            <PedersenHasher as HasherT>::hash_elements(FieldElement::ZERO, FieldElement::ZERO)
-        } else {
-            let hash =
-                elements.iter().fold(FieldElement::ZERO, |a, b| <PedersenHasher as HasherT>::hash_elements(a, *b));
-            <PedersenHasher as HasherT>::hash_elements(
-                hash,
-                FieldElement::from_byte_slice_be(&elements.len().to_be_bytes()).unwrap(),
-            )
+        let mut current_hash = FieldElement::ZERO;
+
+        for item in elements.iter() {
+            current_hash = pedersen_hash(&current_hash, item);
         }
+
+        let data_len = FieldElement::from(elements.len());
+        pedersen_hash(&current_hash, &data_len)
     }
 }
 

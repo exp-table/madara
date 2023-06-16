@@ -162,15 +162,15 @@ fn test_data() -> Vec<u8> {
     ]
 }
 
-struct TestCryptoHasher;
+struct TestHasher;
 
-impl HasherT for TestCryptoHasher {
+impl HasherT for TestHasher {
     fn hash_bytes(&self, data: &[u8]) -> Felt252Wrapper {
-        Felt252Wrapper(FieldElement::ZERO)
+        unimplemented!()
     }
 
     fn compute_hash_on_wrappers(&self, data: &[Felt252Wrapper]) -> Felt252Wrapper {
-        Felt252Wrapper(FieldElement::ZERO)
+        unimplemented!()
     }
 
     fn hash_elements(a: FieldElement, b: FieldElement) -> FieldElement {
@@ -225,7 +225,7 @@ fn test_binary_node_calculate_hash() {
         right: Rc::new(RefCell::new(Node::Leaf(FieldElement::from(3_u32)))),
     };
 
-    binary_node.calculate_hash::<TestCryptoHasher>();
+    binary_node.calculate_hash::<TestHasher>();
     assert_eq!(binary_node.hash, Some(FieldElement::from(5_u32)));
 }
 
