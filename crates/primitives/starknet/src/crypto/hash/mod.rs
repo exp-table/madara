@@ -36,7 +36,7 @@ impl HasherT for Hasher {
         }
     }
 
-    fn hash_elements(a: FieldElement, b: FieldElement) -> FieldElement {
+    fn hash_elements(_a: FieldElement, _b: FieldElement) -> FieldElement {
         todo!()
     }
 
