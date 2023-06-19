@@ -125,10 +125,8 @@ fn calculate_transaction_hash_with_signature<T>(tx: &Transaction) -> FieldElemen
 where
     T: HasherT,
 {
-    let signature_hash = <T as HasherT>::compute_hash_on_elements(
-        &tx.signature.iter().map(|elt| FieldElement::from(*elt)).collect::<Vec<FieldElement>>(),
-    );
-    <T as HasherT>::hash_elements(FieldElement::from(tx.hash), signature_hash)
+    let signature_hash = T::default().compute_hash_on_wrappers(&tx.signature);
+    <T as HasherT>::hash_elements(FieldElement::from(tx.hash), signature_hash.0)
 }
 /// Computes the transaction hash of an invoke transaction.
 ///
@@ -198,24 +196,19 @@ pub fn calculate_transaction_hash_common<T>(
 where
     T: HasherT,
 {
+    let hasher = T::default();
+    let tx_prefix = Felt252Wrapper::try_from(tx_prefix).unwrap();
+    let version = Felt252Wrapper::from(version);
     // All the values are validated before going through this function so it's safe to unwrap.
-    let sender_address = FieldElement::from_bytes_be(&sender_address.into()).unwrap();
-    let calldata_hash = <T as HasherT>::compute_hash_on_elements(
-        &calldata.iter().map(|&val| FieldElement::from(val)).collect::<Vec<FieldElement>>(),
-    );
-    let max_fee = FieldElement::from_bytes_be(&max_fee.into()).unwrap();
-    let nonce = FieldElement::from_bytes_be(&nonce.into()).unwrap();
-    let version = FieldElement::from_byte_slice_be(&version.to_be_bytes()).unwrap();
-    let tx_prefix = FieldElement::from_byte_slice_be(tx_prefix).unwrap();
-
-    let tx_hash = <T as HasherT>::compute_hash_on_elements(&vec![
+    let calldata_hash = hasher.compute_hash_on_wrappers(&calldata);
+    let tx_hash = hasher.compute_hash_on_wrappers(&vec![
         tx_prefix,
         version,
         sender_address,
-        FieldElement::ZERO,
+        Felt252Wrapper::default(),
         calldata_hash,
         max_fee,
-        chain_id.0,
+        chain_id,
         nonce,
     ]);
 
@@ -227,12 +220,8 @@ where
 /// See the [documentation](https://docs.starknet.io/docs/Events/starknet-events#event-hash)
 /// for details.
 pub fn calculate_event_hash<T: HasherT>(event: &EventWrapper) -> FieldElement {
-    let keys_hash = T::compute_hash_on_elements(
-        &event.keys.iter().map(|key| FieldElement::from(*key)).collect::<Vec<FieldElement>>(),
-    );
-    let data_hash = T::compute_hash_on_elements(
-        &event.data.iter().map(|data| FieldElement::from(*data)).collect::<Vec<FieldElement>>(),
-    );
-    let from_address = FieldElement::from(event.from_address);
-    T::compute_hash_on_elements(&[from_address, keys_hash, data_hash])
+    let hasher = T::default();
+    let keys_hash = hasher.compute_hash_on_wrappers(&event.keys);
+    let data_hash = hasher.compute_hash_on_wrappers(&event.data);
+    hasher.compute_hash_on_wrappers(&[event.from_address, keys_hash, data_hash]).into()
 }

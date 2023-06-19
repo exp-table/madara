@@ -45,6 +45,12 @@ impl HasherT for Hasher {
     }
 }
 
+impl Default for Hasher {
+    fn default() -> Self {
+        Hasher::Pedersen(pedersen::PedersenHasher::default()) // Here we choose `Variant2` with a value of `0` as the default.
+    }
+}
+
 /// Implement the `From` trait for the `Hasher` enum.
 macro_rules! into_hasher {
     ($(($hash_function:ident, $inner:ty)),+ ) => {

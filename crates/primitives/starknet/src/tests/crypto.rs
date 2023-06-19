@@ -161,7 +161,7 @@ fn test_data() -> Vec<u8> {
         31, 32,
     ]
 }
-
+#[derive(Default)]
 struct TestHasher;
 
 impl HasherT for TestHasher {

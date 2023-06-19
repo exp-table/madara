@@ -5,7 +5,7 @@ use starknet_crypto::FieldElement;
 use crate::execution::felt252_wrapper::Felt252Wrapper;
 
 /// A trait for hashing.
-pub trait HasherT {
+pub trait HasherT: Default {
     /// Hashes the given data.
     /// # Arguments
     /// * `data` - The data to hash.
