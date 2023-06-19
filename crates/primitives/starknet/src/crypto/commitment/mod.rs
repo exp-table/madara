@@ -1,5 +1,4 @@
 use alloc::vec;
-use alloc::vec::Vec;
 
 use bitvec::vec::BitVec;
 use sp_core::H256;
@@ -200,8 +199,8 @@ where
     let tx_prefix = Felt252Wrapper::try_from(tx_prefix).unwrap();
     let version = Felt252Wrapper::from(version);
     // All the values are validated before going through this function so it's safe to unwrap.
-    let calldata_hash = hasher.compute_hash_on_wrappers(&calldata);
-    let tx_hash = hasher.compute_hash_on_wrappers(&vec![
+    let calldata_hash = hasher.compute_hash_on_wrappers(calldata);
+    hasher.compute_hash_on_wrappers(&vec![
         tx_prefix,
         version,
         sender_address,
@@ -210,9 +209,7 @@ where
         max_fee,
         chain_id,
         nonce,
-    ]);
-
-    tx_hash.into()
+    ])
 }
 
 /// Calculate the hash of an event.
