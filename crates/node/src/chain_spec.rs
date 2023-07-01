@@ -1,6 +1,6 @@
 use blockifier::execution::contract_class::ContractClass;
-use madara_runtime::{AuraConfig, EnableManualSeal, GrandpaConfig, RuntimeGenesisConfig, SystemConfig, WASM_BINARY};
-use mp_starknet::execution::types::{ContractClassWrapper, Felt252Wrapper};
+use madara_runtime::{AuraConfig, EnableManualSeal, GenesisConfig, GrandpaConfig, SystemConfig, WASM_BINARY};
+use mp_starknet::execution::types::Felt252Wrapper;
 use pallet_starknet::types::ContractStorageKeyWrapper;
 use sc_service::ChainType;
 use serde::{Deserialize, Serialize};
@@ -15,7 +15,7 @@ use starknet_core::utils::get_storage_var_address;
 use super::constants::*;
 
 /// Specialized `ChainSpec`. This is a specialization of the general Substrate ChainSpec type.
-pub type ChainSpec = sc_service::GenericChainSpec<RuntimeGenesisConfig>;
+pub type ChainSpec = sc_service::GenericChainSpec<GenesisConfig>;
 
 /// Specialized `ChainSpec` for development.
 pub type DevChainSpec = sc_service::GenericChainSpec<DevGenesisExt>;
@@ -27,7 +27,7 @@ pub const CHAIN_ID_STARKNET_TESTNET: u128 = 0x534e5f474f45524c49;
 #[derive(Serialize, Deserialize)]
 pub struct DevGenesisExt {
     /// Genesis config.
-    genesis_config: RuntimeGenesisConfig,
+    genesis_config: GenesisConfig,
     /// The flag that if enable manual-seal mode.
     enable_manual_seal: Option<bool>,
 }
@@ -102,14 +102,8 @@ pub fn local_testnet_config() -> Result<ChainSpec, String> {
             testnet_genesis(
                 wasm_binary,
                 // Initial PoA authorities
-                vec![
-                    authority_keys_from_seed("Alice"),
-                    authority_keys_from_seed("Bob"),
-                    authority_keys_from_seed("Charlie"),
-                    authority_keys_from_seed("Dave"),
-                    authority_keys_from_seed("Eve"),
-                    authority_keys_from_seed("Ferdie"),
-                ],
+                // Intended to be only 2
+                vec![authority_keys_from_seed("Alice"), authority_keys_from_seed("Bob")],
                 true,
             )
         },
@@ -157,33 +151,28 @@ fn testnet_genesis(
     wasm_binary: &[u8],
     initial_authorities: Vec<(AuraId, GrandpaId)>,
     _enable_println: bool,
-) -> RuntimeGenesisConfig {
+) -> GenesisConfig {
     // ACCOUNT CONTRACT
     let no_validate_account_class =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/NoValidateAccount.json")).try_into().unwrap();
+        get_contract_class(include_bytes!("../../../cairo-contracts/build/NoValidateAccount.json"));
     let no_validate_account_class_hash = Felt252Wrapper::from_hex_be(NO_VALIDATE_ACCOUNT_CLASS_HASH).unwrap();
     let no_validate_account_address = Felt252Wrapper::from_hex_be(NO_VALIDATE_ACCOUNT_ADDRESS).unwrap();
 
     // ARGENT ACCOUNT CONTRACT
-    let argent_account_class =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/ArgentAccount.json")).try_into().unwrap();
+    let argent_account_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/ArgentAccount.json"));
     let argent_account_class_hash = Felt252Wrapper::from_hex_be(ARGENT_ACCOUNT_CLASS_HASH).unwrap();
     let argent_account_address = Felt252Wrapper::from_hex_be(ARGENT_ACCOUNT_ADDRESS).unwrap();
-    let argent_proxy_class =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/Proxy.json")).try_into().unwrap();
+    let argent_proxy_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/Proxy.json"));
     let argent_proxy_class_hash = Felt252Wrapper::from_hex_be(ARGENT_PROXY_CLASS_HASH).unwrap();
 
     // OZ ACCOUNT CONTRACT
     let oz_account_class =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/OpenzeppelinAccount.json"))
-            .try_into()
-            .unwrap();
+        get_contract_class(include_bytes!("../../../cairo-contracts/build/OpenzeppelinAccount.json"));
     let oz_account_class_hash = Felt252Wrapper::from_hex_be(OZ_ACCOUNT_CLASS_HASH).unwrap();
     let oz_account_address = Felt252Wrapper::from_hex_be(OZ_ACCOUNT_ADDRESS).unwrap();
 
     // TEST CONTRACT
-    let test_contract_class =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/test.json")).try_into().unwrap();
+    let test_contract_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/test.json"));
     let test_contract_class_hash = Felt252Wrapper::from_hex_be(TEST_CONTRACT_CLASS_HASH).unwrap();
     let test_contract_address = Felt252Wrapper::from_hex_be(TEST_CONTRACT_ADDRESS).unwrap();
 
@@ -192,27 +181,24 @@ fn testnet_genesis(
     let fee_token_class_hash = Felt252Wrapper::from_hex_be(FEE_TOKEN_CLASS_HASH).unwrap();
 
     // ERC20 CONTRACT
-    let erc20_class: ContractClassWrapper =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/ERC20.json")).try_into().unwrap();
+    let erc20_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/ERC20.json"));
     let token_class_hash = Felt252Wrapper::from_hex_be(ERC20_CLASS_HASH).unwrap();
     let token_contract_address = Felt252Wrapper::from_hex_be(ERC20_ADDRESS).unwrap();
 
     // ERC721 CONTRACT
-    let erc721_class: ContractClassWrapper =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/ERC721.json")).try_into().unwrap();
+    let erc721_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/ERC721.json"));
     let nft_class_hash = Felt252Wrapper::from_hex_be(ERC721_CLASS_HASH).unwrap();
     let nft_contract_address = Felt252Wrapper::from_hex_be(ERC721_ADDRESS).unwrap();
 
     // UDC CONTRACT
-    let udc_class: ContractClassWrapper =
-        get_contract_class(include_bytes!("../../../cairo-contracts/build/UniversalDeployer.json")).try_into().unwrap();
+    let udc_class = get_contract_class(include_bytes!("../../../cairo-contracts/build/UniversalDeployer.json"));
     let udc_class_hash = Felt252Wrapper::from_hex_be(UDC_CLASS_HASH).unwrap();
     let udc_contract_address = Felt252Wrapper::from_hex_be(UDC_CONTRACT_ADDRESS).unwrap();
 
     let public_key = Felt252Wrapper::from_hex_be(PUBLIC_KEY).unwrap();
     let chain_id = Felt252Wrapper(FieldElement::from_byte_slice_be(&CHAIN_ID_STARKNET_TESTNET.to_be_bytes()).unwrap());
 
-    RuntimeGenesisConfig {
+    GenesisConfig {
         system: SystemConfig {
             // Add Wasm runtime to storage.
             code: wasm_binary.to_vec(),

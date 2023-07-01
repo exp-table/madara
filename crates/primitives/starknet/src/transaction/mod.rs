@@ -19,7 +19,7 @@ use blockifier::state::errors::StateError;
 use blockifier::state::state_api::State;
 use blockifier::transaction::errors::TransactionExecutionError;
 use blockifier::transaction::objects::AccountTransactionContext;
-use blockifier::transaction::transaction_utils::verify_no_calls_to_other_contracts;
+use blockifier::transaction::transaction_utils::{update_remaining_gas, verify_no_calls_to_other_contracts};
 use blockifier::transaction::transactions::{
     DeclareTransaction as StarknetDeclareTransaction, Executable, L1HandlerTransaction as StarknetL1HandlerTransaction,
 };
@@ -41,7 +41,7 @@ use self::types::{
     TransactionExecutionInfoWrapper, TransactionExecutionResultWrapper, TransactionReceiptWrapper,
     TransactionValidationErrorWrapper, TransactionValidationResultWrapper, TxType,
 };
-use crate::execution::types::{CallEntryPointWrapper, ContractAddressWrapper, ContractClassWrapper, Felt252Wrapper};
+use crate::execution::types::{CallEntryPointWrapper, ContractAddressWrapper, Felt252Wrapper};
 use crate::fees::{self, charge_fee};
 use crate::state::StateChanges;
 
@@ -58,9 +58,8 @@ impl EventWrapper {
         keys: BoundedVec<Felt252Wrapper, MaxArraySize>,
         data: BoundedVec<Felt252Wrapper, MaxArraySize>,
         from_address: ContractAddressWrapper,
-        transaction_hash: Felt252Wrapper,
     ) -> Self {
-        Self { keys, data, from_address, transaction_hash }
+        Self { keys, data, from_address }
     }
 
     /// Creates an empty event.
@@ -69,7 +68,6 @@ impl EventWrapper {
             keys: BoundedVec::try_from(vec![]).unwrap(),
             data: BoundedVec::try_from(vec![]).unwrap(),
             from_address: ContractAddressWrapper::default(),
-            transaction_hash: Felt252Wrapper::default(),
         }
     }
 
@@ -85,7 +83,6 @@ pub struct EventBuilder {
     keys: vec::Vec<Felt252Wrapper>,
     data: vec::Vec<Felt252Wrapper>,
     from_address: Option<StarknetContractAddress>,
-    transaction_hash: Option<TransactionHash>,
 }
 
 impl EventBuilder {
@@ -119,16 +116,6 @@ impl EventBuilder {
         self
     }
 
-    /// Sets the transaction hash of the event.
-    ///
-    /// # Arguments
-    ///
-    /// * `transaction_hash` - Transaction hash where the event was emitted from.
-    pub fn with_transaction_hash(mut self, transaction_hash: TransactionHash) -> Self {
-        self.transaction_hash = Some(transaction_hash);
-        self
-    }
-
     /// Sets keys and data from an event content.
     ///
     /// # Arguments
@@ -155,7 +142,6 @@ impl EventBuilder {
                 .bytes()
                 .try_into()
                 .map_err(|_| EventError::InvalidFromAddress)?,
-            transaction_hash: self.transaction_hash.unwrap_or_default().0.into(),
         })
     }
 }
@@ -167,7 +153,6 @@ impl Default for EventWrapper {
             keys: BoundedVec::try_from(vec![one, one]).unwrap(),
             data: BoundedVec::try_from(vec![one, one]).unwrap(),
             from_address: one,
-            transaction_hash: Felt252Wrapper::default(),
         }
     }
 }
@@ -305,7 +290,7 @@ impl Transaction {
         sender_address: ContractAddressWrapper,
         nonce: Felt252Wrapper,
         call_entrypoint: CallEntryPointWrapper,
-        contract_class: Option<ContractClassWrapper>,
+        contract_class: Option<ContractClass>,
         contract_address_salt: Option<U256>,
         max_fee: Felt252Wrapper,
     ) -> Self {
@@ -413,7 +398,10 @@ impl Transaction {
             }
         };
 
-        self.validate_tx(state, execution_resources, block_context, &account_context, tx_type)
+        // FIXME 710
+        let mut initial_gas = super::constants::INITIAL_GAS_COST.into();
+
+        self.validate_tx(state, execution_resources, block_context, &account_context, tx_type, &mut initial_gas)
     }
 
     /// Validates a transaction
@@ -433,6 +421,7 @@ impl Transaction {
         block_context: &BlockContext,
         account_tx_context: &AccountTransactionContext,
         tx_type: &TxType,
+        remaining_gas: &mut Felt252,
     ) -> TransactionValidationResultWrapper<Option<CallInfo>> {
         let mut context = EntryPointExecutionContext::new(
             block_context.clone(),
@@ -443,9 +432,6 @@ impl Transaction {
             return Ok(None);
         }
 
-        // FIXME 710
-        let initial_gas = super::constants::INITIAL_GAS_COST.into();
-
         let validate_call = CallEntryPoint {
             entry_point_type: EntryPointType::External,
             entry_point_selector: self.validate_entry_point_selector(tx_type)?,
@@ -455,7 +441,7 @@ impl Transaction {
             storage_address: account_tx_context.sender_address,
             caller_address: StarknetContractAddress::default(),
             call_type: CallType::Call,
-            initial_gas,
+            initial_gas: remaining_gas.clone(),
         };
 
         let validate_call_info = validate_call
@@ -463,8 +449,8 @@ impl Transaction {
             .map_err(TransactionValidationErrorWrapper::from)?;
         verify_no_calls_to_other_contracts(&validate_call_info, String::from(constants::VALIDATE_ENTRY_POINT_NAME))
             .map_err(TransactionValidationErrorWrapper::TransactionValidationError)?;
-        // FIXME 710
-        // update_remaining_gas(initial_gas, &validate_call_info);
+
+        update_remaining_gas(remaining_gas, &validate_call_info);
 
         Ok(Some(validate_call_info))
     }
@@ -490,6 +476,13 @@ impl Transaction {
         let allowed_versions: vec::Vec<TransactionVersion> = match tx_type {
             TxType::Declare => {
                 // Support old versions in order to allow bootstrapping of a new system.
+                vec![
+                    TransactionVersion(StarkFelt::from(0_u8)),
+                    TransactionVersion(StarkFelt::from(1_u8)),
+                    TransactionVersion(StarkFelt::from(2_u8)),
+                ]
+            }
+            TxType::Invoke => {
                 vec![TransactionVersion(StarkFelt::from(0_u8)), TransactionVersion(StarkFelt::from(1_u8))]
             }
             _ => vec![TransactionVersion(StarkFelt::from(1_u8))],
@@ -551,11 +544,17 @@ impl Transaction {
                 );
 
                 // Update nonce
-                self.handle_nonce(state, &account_context)?;
+                Self::handle_nonce(state, &account_context)?;
 
                 // Validate.
-                let validate_call_info =
-                    self.validate_tx(state, execution_resources, block_context, &account_context, &tx_type)?;
+                let validate_call_info = self.validate_tx(
+                    state,
+                    execution_resources,
+                    block_context,
+                    &account_context,
+                    &tx_type,
+                    &mut initial_gas,
+                )?;
 
                 // Execute.
                 (
@@ -599,11 +598,17 @@ impl Transaction {
                 );
 
                 // Update nonce
-                self.handle_nonce(state, &account_context)?;
+                Self::handle_nonce(state, &account_context)?;
 
                 // Validate.
-                let validate_call_info =
-                    self.validate_tx(state, execution_resources, block_context, &account_context, &tx_type)?;
+                let validate_call_info = self.validate_tx(
+                    state,
+                    execution_resources,
+                    block_context,
+                    &account_context,
+                    &tx_type,
+                    &mut initial_gas,
+                )?;
 
                 // Execute.
                 (
@@ -625,7 +630,7 @@ impl Transaction {
                 );
 
                 // Update nonce
-                self.handle_nonce(state, &account_context)?;
+                Self::handle_nonce(state, &account_context)?;
 
                 // Execute.
                 let transaction_execution = tx
@@ -634,7 +639,14 @@ impl Transaction {
 
                 (
                     transaction_execution,
-                    self.validate_tx(state, execution_resources, block_context, &account_context, &tx_type)?,
+                    self.validate_tx(
+                        state,
+                        execution_resources,
+                        block_context,
+                        &account_context,
+                        &tx_type,
+                        &mut initial_gas,
+                    )?,
                     account_context,
                 )
             }
@@ -668,7 +680,6 @@ impl Transaction {
     ///
     /// * `TransactionExecutionResult<()>` - The result of the nonce handling
     pub fn handle_nonce(
-        &self,
         state: &mut dyn State,
         account_tx_context: &AccountTransactionContext,
     ) -> TransactionExecutionResultWrapper<()> {
